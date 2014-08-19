@@ -1,0 +1,47 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+# WARN num, CRIT num
+eximq_default_levels = (100, 200)
+
+def inventory_eximq(info):
+    if len(info) > 0 and info[0] != '':
+        return [(None, 'eximq_default_levels')]
+
+def eximq_to_bytes(value, uom):
+    uom = uom.lower()
+    if uom == 'kbytes':
+        return value * 1024
+    elif uom == 'mbytes':
+        return value * 1024 * 1024
+    elif uom == 'gbytes':
+        return value * 1024 * 1024 * 1024
+
+def check_eximq(item, params, info):
+    for line in info:
+        if " ".join(line[-2:]) == 'is empty':
+            return (0, 'OK - The mailqueue is empty ', [ ('length', 0, params[0], params[1]),
+                                                         ('size', '0') ])
+        elif line[0] == '--' or line[0:2] == [ 'Total', 'requests:']:
+            if line[0] == '--':
+                size    = eximq_to_bytes(float(line[1]), line[2])
+                len     = int(line[4])
+            else:
+                size    = 0
+                len     = int(line[2])
+
+            perfdata = [ ('length', len, params[0], params[1]),
+                         ('size', '%d' % size) ]
+
+            if len > params[1]:
+                return (2, 'CRIT - Mailqueue length is %d '
+                           '(More than threshold: %d)' % (len, params[0]), perfdata)
+            elif len > params[0]:
+                return (1, 'WARN - Mailqueue length is %d '
+                           '(More than threshold: %d)' % (len, params[0]), perfdata)
+            else:
+                return (0, 'OK - Mailqueue length is %d ' % len, perfdata)
+
+    return (3, 'UNKNOWN - Could not find summarizing line in output')
+
+check_info['eximq'] = (check_eximq, "Postfix Queue", 1, inventory_eximq)
+checkgroup_of["eximq"] = "mailqueue_length"
